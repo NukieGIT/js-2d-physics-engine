@@ -93,11 +93,11 @@ const USERINPUT = {
     }
 }
 
-const wasd = {x: 0, y: 0};
+const wasd = new Vector(0, 0);
 
 
 class Object {
-    constructor(pos, vel, keyInputForce, mass, friction, drag, angle, angVel, restitution, color="purple") {
+    constructor(pos, vel, keyInputForce, mass, gravity, friction, drag, angle, angVel, restitution, isPlayer, color="purple") {
         this.pos;
         this.setPos(pos);
         this.vel = vel;
@@ -105,6 +105,7 @@ class Object {
         this.acc = new Vector(0, 0);
         this.mass = 0;
         this.setMass(mass);
+        this.gravity = gravity;
         this.friction = friction;
         this.drag = drag;
         this.angle = angle;
@@ -112,7 +113,7 @@ class Object {
         this.restitution = restitution;
         this.color = "purple";
         this.setColor(color);
-        this.isPlayer = false;
+        this.isPlayer = isPlayer;
         OBJECTS.push(this);
     }
 
@@ -134,10 +135,11 @@ class Object {
             // console.log(this.acc);
         // }
 
-        this.applyForce(new Vector(wasd.x, wasd.y));
+        this.applyForce(new Vector(wasd.x, wasd.y).mult(this.keyInputForce));
     }
 
     reposition() {
+        // FIX applyForce method
         this.#handleAcc();
         this.vel = this.vel.add(this.acc);
         this.pos = this.pos.add(this.vel);
@@ -155,16 +157,30 @@ class Object {
         
         // }
     
+    attract(obj) {
+        let dir = this.pos.sub(obj.pos);
+        let magnitude = dir.mag();
+        dir = dir.normalize();
+
+        magnitude = clamp(magnitude, 20, Number.POSITIVE_INFINITY);
+
+        let strength = (this.gravity * this.mass * obj.mass) / magnitude**2;
+
+        dir = dir.mult(strength * magnitude);
+        obj.applyForce(dir);
+    }
+
     #handleAcc() {
-        if (this.acc.mag() > 1) {
-            this.acc = this.acc.normalize();
-        }
-        this.acc = this.acc.mult(this.keyInputForce).mult(this.invMass);
+        // if (this.acc.mag() > 1) {
+        //     this.acc = this.acc.normalize();
+        // }
+        // this.acc = this.acc.mult(this.keyInputForce).mult(this.invMass);
+        this.acc = this.acc.mult(this.invMass);
     }
 
     applyDrag() {
         if (this.vel.mag() < 0.1) {
-            this.vel = this.vel.setMag(0);
+            this.vel = Vector.zero();
             return;
         }
         let drag = this.vel.copy();
@@ -206,8 +222,8 @@ class Object {
 }
 
 class Ball extends Object{
-    constructor(pos, vel, keyInputForce, mass, radius, friction, drag, restitution, color) {
-        super(pos, vel, keyInputForce, mass, friction, drag, 0, 0, restitution, color);
+    constructor(pos, vel, keyInputForce, mass, radius, gravity, friction, drag, restitution, isPlayer, color) {
+        super(pos, vel, keyInputForce, mass, gravity, friction, drag, 0, 0, restitution, isPlayer, color);
         this.radius = radius;
         super.setMass(radius);
     }
@@ -243,9 +259,11 @@ function userInput() {
     canvas.addEventListener("keyup", e => {
         USERINPUT.keyboard[e.code] = false;
 
-    })
+    })    
+}
 
-    
+function clamp(val, min, max) {
+    return val > max ? max : val < min ? min : val;
 }
 
 function mainLoop() {
@@ -253,8 +271,12 @@ function mainLoop() {
     
     for (let object of OBJECTS) {
         object.render();
-        object.input();
+        if (object.isPlayer) object.input();
         object.applyDrag();
+        // for (let obj of OBJECTS) {
+        //     if (object === obj) continue;
+        //     object.attract(obj);
+        // }
         // object.applyFriction();
         object.reposition();
     }
@@ -280,8 +302,8 @@ function mainLoop() {
     requestAnimationFrame(mainLoop);
 }
 
-// let ball = new Ball(new Vector(300, 300), new Vector(0, 0), 20, 1, 50, 0.7, 0.05, 1, "white");
-let ball2 = new Ball(new Vector(500, 300), new Vector(0, 0), 20, 1, 30, 0.7, 0.05, 1, "yellow");
+let ball = new Ball(new Vector(300, 300), new Vector(0, 0), 20, 1, 50, 1, 0.7, 0.5, 1, false, "white");
+let ball2 = new Ball(new Vector(500, 300), new Vector(0, 0), 100, 1, 30, 5, 0.7, 0.5, 1, true, "yellow");
 
 mainLoop();
 userInput();
