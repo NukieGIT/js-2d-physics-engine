@@ -9,17 +9,6 @@ let HEIGHT = window.innerHeight;
 canvas.width = WIDTH;
 canvas.height = HEIGHT;
 
-const OBJECTS = [];
-
-const USERINPUT = {
-    keyboard: {},
-    mouse: {
-        pos: undefined
-    }
-}
-
-const wasd = {x: 0, y: 0};
-
 class Vector {
     constructor(x, y) {
         this.x = x;
@@ -31,6 +20,9 @@ class Vector {
         this.y = y;
     }
 
+    copy() {
+        return new Vector(this.x, this.y);
+    }
     
     add(v) {
         return new Vector(this.x + v.x, this.y + v.y);
@@ -47,6 +39,20 @@ class Vector {
     mult(n) {
         return new Vector(this.x * n, this.y * n);
     }
+
+    div(n) {
+        if (n === 0) {
+            return Vector.zero();
+        }
+        return new Vector(this.x / n, this.y / n);
+    }
+
+    setMag(mag) {
+        if (this.mag() === 0) {
+            return Vector.zero();
+        }
+        return new Vector(this.x * mag / this.mag(), this.y * mag / this.mag());
+    }
     
     normalize() {
         if (this.mag() === 0) {
@@ -56,12 +62,6 @@ class Vector {
         }
     }
 
-    static div(v, n) {
-        if (n === 0) {
-            return Vector.zero();
-        }
-        return new Vector(v.x / n, v.y / n);
-    }
     
     static dot(v1, v2) {
         return v1.x * v2.x + v1.y * v2.y;
@@ -84,8 +84,20 @@ class Vector {
     }
 }
 
+const OBJECTS = [];
+
+const USERINPUT = {
+    keyboard: {},
+    mouse: {
+        pos: new Vector(0, 0)
+    }
+}
+
+const wasd = {x: 0, y: 0};
+
+
 class Object {
-    constructor(pos, vel, keyInputForce, mass, friction, angle, angVel, restitution, color="purple") {
+    constructor(pos, vel, keyInputForce, mass, friction, drag, angle, angVel, restitution, color="purple") {
         this.pos;
         this.setPos(pos);
         this.vel = vel;
@@ -94,6 +106,7 @@ class Object {
         this.mass = 0;
         this.setMass(mass);
         this.friction = friction;
+        this.drag = drag;
         this.angle = angle;
         this.angVel = angVel;
         this.restitution = restitution;
@@ -106,43 +119,62 @@ class Object {
     input() {
         // if (USERINPUT.keyboard.KeyW) {
         //     this.applyForce(new Vector(0, -this.keyInputForce))
-        //     // console.log(this.acc);
+            // console.log(this.acc);
         // }
         // if (USERINPUT.keyboard.KeyA) {
         //     this.applyForce(new Vector(-this.keyInputForce, 0))
-        //     // console.log(this.acc);
+            // console.log(this.acc);
         // }
         // if (USERINPUT.keyboard.KeyS) {
         //     this.applyForce(new Vector(0, this.keyInputForce))
-        //     // console.log(this.acc);
+            // console.log(this.acc);
         // }
         // if (USERINPUT.keyboard.KeyD) {
         //     this.applyForce(new Vector(this.keyInputForce, 0))
-        //     // console.log(this.acc);
+            // console.log(this.acc);
         // }
 
         this.applyForce(new Vector(wasd.x, wasd.y));
-
-        // if (!USERINPUT.keyboard.KeyW && !USERINPUT.keyboard.KeyS) {
-        //     this.acc.y = 0;
-        // }
-        // if (!USERINPUT.keyboard.KeyA && !USERINPUT.keyboard.KeyD) {
-        //     this.acc.x = 0;
-        // }
     }
 
     reposition() {
-        // this.acc = this.acc.normalize();
-        if (this.acc.mag() > 1) {
-            this.acc = this.acc.normalize();
-        }
-        this.acc = this.acc.mult(this.keyInputForce).mult(this.invMass);
-        console.log(this.acc.mag());
+        this.#handleAcc();
         this.vel = this.vel.add(this.acc);
         this.pos = this.pos.add(this.vel);
         this.acc = Vector.zero();
     }
     
+    // applyFriction() {
+        //     let frictionF = new Vector(this.vel.x, this.vel.y);
+        //     let normal = this.mass;
+        //     frictionF = frictionF.normalize();
+        //     frictionF = frictionF.mult(-1);
+        //     frictionF.setMag(this.friction * normal);
+        //     console.log(frictionF);
+        //     this.applyForce(frictionF);
+        
+        // }
+    
+    #handleAcc() {
+        if (this.acc.mag() > 1) {
+            this.acc = this.acc.normalize();
+        }
+        this.acc = this.acc.mult(this.keyInputForce).mult(this.invMass);
+    }
+
+    applyDrag() {
+        if (this.vel.mag() < 0.1) {
+            this.vel = this.vel.setMag(0);
+            return;
+        }
+        let drag = this.vel.copy();
+        let speed = this.vel.mag();
+        drag = drag.normalize();
+        drag = drag.mult(-1);
+        drag = drag.mult(this.drag * speed**2);
+        this.applyForce(drag);
+    }
+
     applyForce(f) {
         this.acc = this.acc.add(f);
     }
@@ -174,8 +206,8 @@ class Object {
 }
 
 class Ball extends Object{
-    constructor(pos, vel, keyInputForce, mass, radius, friction, restitution, color) {
-        super(pos, vel, keyInputForce, mass, friction, 0, 0, restitution, color);
+    constructor(pos, vel, keyInputForce, mass, radius, friction, drag, restitution, color) {
+        super(pos, vel, keyInputForce, mass, friction, drag, 0, 0, restitution, color);
         this.radius = radius;
         super.setMass(radius);
     }
@@ -222,6 +254,8 @@ function mainLoop() {
     for (let object of OBJECTS) {
         object.render();
         object.input();
+        object.applyDrag();
+        // object.applyFriction();
         object.reposition();
     }
     
@@ -246,8 +280,8 @@ function mainLoop() {
     requestAnimationFrame(mainLoop);
 }
 
-let ball = new Ball(new Vector(300, 300), new Vector(0, 0), 20, 1, 50, 1, 1, "white");
-// let ball2 = new Ball(new Vector(500, 300), new Vector(0, 0), 20, 1, 40, 1, 1, "yellow");
+// let ball = new Ball(new Vector(300, 300), new Vector(0, 0), 20, 1, 50, 0.7, 0.05, 1, "white");
+let ball2 = new Ball(new Vector(500, 300), new Vector(0, 0), 20, 1, 30, 0.7, 0.05, 1, "yellow");
 
 mainLoop();
 userInput();
